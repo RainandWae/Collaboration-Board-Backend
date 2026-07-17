@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BoardRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum ActivityAction {
+  BOARD_CREATED
+  LIST_CREATED
+  CARD_CREATED
+  CARD_UPDATED
+  CARD_MOVED
+  COMMENT_CREATED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  memberships  BoardMember[]
+  comments     Comment[]
+  activities   Activity[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Board {
+  id          String        @id @default(uuid())
+  title       String
+  members     BoardMember[]
+  lists       List[]
+  labels      Label[]
+  activities  Activity[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model BoardMember {
+  boardId   String
+  userId    String
+  role      BoardRole @default(VIEWER)
+  board     Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@id([boardId, userId])
+}
+
+model List {
+  id        String   @id @default(uuid())
+  boardId   String
+  title     String
+  position  Int
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  cards     Card[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([boardId, position])
+}
+
+model Card {
+  id          String      @id @default(uuid())
+  listId      String
+  title       String
+  description String?
+  position    Int
+  version     Int         @default(1)
+  list        List        @relation(fields: [listId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  labels      CardLabel[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([listId, position])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  cardId    String
+  authorId  String
+  body      String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Label {
+  id        String      @id @default(uuid())
+  boardId   String
+  name      String
+  color     String
+  board     Board       @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  cards     CardLabel[]
+  createdAt DateTime    @default(now())
+
+  @@unique([boardId, name])
+}
+
+model CardLabel {
+  cardId  String
+  labelId String
+  card    Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, labelId])
+}
+
+model Activity {
+  id        String         @id @default(uuid())
+  boardId   String
+  actorId   String
+  action    ActivityAction
+  metadata  Json
+  board     Board          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  actor     User           @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+
+  @@index([boardId, createdAt])
+}
