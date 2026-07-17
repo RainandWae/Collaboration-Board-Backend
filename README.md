@@ -1,7 +1,5 @@
 # SyncBoard Backend
 
-Suggested GitHub repo name: `syncboard-backend`
-
 A barebones backend scaffold for a real-time collaborative task and notes board.
 
 ## Stack
