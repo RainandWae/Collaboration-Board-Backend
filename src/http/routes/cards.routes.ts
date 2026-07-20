@@ -2,6 +2,7 @@ import { BoardRole } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db/prisma";
+import { emitBoardEvent } from "../../realtime/events";
 import { requireAuth, type AuthedRequest } from "../middleware/auth";
 import { requireCardBoardRole } from "../permissions/boards";
 
@@ -258,6 +259,14 @@ cardsRouter.patch("/:cardId/move", async (req: AuthedRequest, res, next) => {
             }
         });
 
+        emitBoardEvent(req, access.boardId, "card:moved", {
+            card: result.card,
+            fromListId: result.fromListId,
+            toListId: result.toListId,
+            fromPosition: result.fromPosition,
+            toPosition: result.toPosition
+        });
+
         res.json({ card: result.card });
     } catch (error) {
         next(error);
@@ -329,6 +338,8 @@ cardsRouter.patch("/:cardId", async (req: AuthedRequest, res, next) => {
       }
     });
 
+    emitBoardEvent(req, access.boardId, "card:updated", { card: updatedCard });
+
     res.json({ card: updatedCard });
   } catch (error) {
     next(error);
@@ -351,6 +362,8 @@ cardsRouter.delete("/:cardId", async (req: AuthedRequest, res, next) => {
     await prisma.card.delete({
       where: { id: cardId }
     });
+
+    emitBoardEvent(req, access.boardId, "card:deleted", { cardId });
 
     res.status(204).send();
   } catch (error) {

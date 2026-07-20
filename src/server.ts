@@ -9,7 +9,9 @@ import { createSocketServer } from "./realtime/socket";
 async function main() {
   const app = createApp();
   const server = http.createServer(app);
-  createSocketServer(server);
+  const io = createSocketServer(server);
+
+  app.set("io", io);
   const notificationWorker = startNotificationWorker();
 
   server.listen(env.PORT, () => {

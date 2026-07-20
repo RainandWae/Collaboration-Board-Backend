@@ -2,6 +2,7 @@ import { BoardRole } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db/prisma";
+import { emitBoardEvent } from "../../realtime/events";
 import { requireAuth, type AuthedRequest } from "../middleware/auth";
 import { requireBoardRole } from "../permissions/boards";
 
@@ -122,6 +123,8 @@ boardsRouter.post("/:boardId/lists", async (req: AuthedRequest, res, next) => {
         }
       }
     });
+
+    emitBoardEvent(req, boardId, "list:created", { list });
 
     res.status(201).json({ list });
   } catch (error) {

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "../../db/prisma";
 import { requireAuth, type AuthedRequest } from "../middleware/auth";
 import { requireListBoardRole } from "../permissions/boards";
+import { emitBoardEvent } from "../../realtime/events";
 
 export const listsRouter = Router();
 
@@ -104,6 +105,8 @@ listsRouter.post("/:listId/cards", async (req: AuthedRequest, res, next) => {
             }
         });
 
+        emitBoardEvent(req, access.list.boardId, "card:created", { card });
+
         res.status(201).json({ card });
     } catch (error) {
         next(error);
@@ -128,6 +131,8 @@ listsRouter.patch("/:listId", async (req: AuthedRequest, res, next) => {
             where: { id: listId },
             data: input
         });
+        
+        emitBoardEvent(req, access.list.boardId, "list:updated", { list });
 
         res.json({ list });
     } catch (error) {
@@ -151,6 +156,8 @@ listsRouter.delete("/:listId", async (req: AuthedRequest, res, next) => {
         await prisma.list.delete({
             where: { id: listId }
         });
+
+        emitBoardEvent(req, access.list.boardId, "list:deleted", { listId });
 
         res.status(204).send();
     } catch (error) {
