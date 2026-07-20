@@ -6,6 +6,7 @@ import { env } from "../config/env";
 import { authRouter } from "./routes/auth.routes";
 import { boardsRouter } from "./routes/boards.routes";
 import { healthRouter } from "./routes/health.routes";
+import { listsRouter } from "./routes/lists.routes";
 
 export function createApp() {
   const app = express();
@@ -18,6 +19,7 @@ export function createApp() {
   app.use("/health", healthRouter);
   app.use("/auth", authRouter);
   app.use("/boards", boardsRouter);
+  app.use("/lists", listsRouter);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(err);

@@ -1,0 +1,63 @@
+import { BoardRole } from "@prisma/client";
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../../db/prisma";
+import { requireAuth, type AuthedRequest } from "../middleware/auth";
+import { requireListBoardRole } from "../permissions/boards";
+
+export const listsRouter = Router();
+
+listsRouter.use(requireAuth);
+
+const updateListSchema = z.object({
+  title: z.string().min(1).optional(),
+  position: z.number().int().min(0).optional()
+});
+
+listsRouter.patch("/:listId", async (req: AuthedRequest, res, next) => {
+    try {
+        const listId = String(req.params.listId);
+        const input = updateListSchema.parse(req.body);
+
+        const access = await requireListBoardRole(listId, req.user!.id, [
+            BoardRole.OWNER,
+            BoardRole.EDITOR,
+        ]);
+
+        if (!access) {
+            return res.status(403).json({ error: "You cannot update this list" });
+        }
+
+        const list = await prisma.list.update({
+            where: { id: listId },
+            data: input
+        });
+
+        res.json({ list });
+    } catch (error) {
+        next(error);
+    }
+});
+
+listsRouter.delete("/:listId", async (req: AuthedRequest, res, next) => {
+    try {
+        const listId = String(req.params.listId);
+
+        const access = await requireListBoardRole(listId, req.user!.id, [
+            BoardRole.OWNER,
+            BoardRole.EDITOR
+        ]);
+
+        if (!access) {
+            return res.status(403).json({ error: "You cannot delete this list" });
+        }
+
+        await prisma.list.delete({
+            where: { id: listId }
+        });
+
+        res.status(204).send();
+    } catch (error) {
+        next(error);
+    }
+});
