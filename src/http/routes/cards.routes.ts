@@ -22,6 +22,10 @@ const moveCardSchema = z.object({
     version: z.number().int().min(1)
 });
 
+const createCommentSchema = z.object({
+    body: z.string().min(1)
+});
+
 cardsRouter.get("/:cardId", async (req: AuthedRequest, res, next) => {
   try {
     const cardId = String(req.params.cardId);
@@ -59,6 +63,94 @@ cardsRouter.get("/:cardId", async (req: AuthedRequest, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+cardsRouter.get("/:cardId/comments", async (req: AuthedRequest, res, next) => {
+    try {
+        const cardId = String(req.params.cardId);
+
+        const access = await requireCardBoardRole(cardId, req.user!.id, [
+            BoardRole.OWNER,
+            BoardRole.EDITOR,
+            BoardRole.VIEWER
+        ]);
+
+        if (!access) {
+            return res.status(403).json({ error: "You cannot view comments on this card" });
+        }
+
+        const comments = await prisma.comment.findMany({
+            where: { cardId },
+            orderBy: { createdAt: "asc" },
+            include: {
+                author: {
+                    select: {
+                        id: true,
+                        email: true,
+                        name: true,
+                    }
+                }
+            }
+        });
+
+        res.json({ comments });
+    } catch (error) {
+        next(error);
+    }
+});
+
+cardsRouter.post("/:cardId/comments", async (req: AuthedRequest, res, next) => {
+    try {
+        const cardId = String(req.params.cardId) ;
+        const input = createCommentSchema.parse(req.body);
+
+        const access = await requireCardBoardRole(cardId, req.user!.id, [
+            BoardRole.OWNER,
+            BoardRole.EDITOR
+        ]);
+
+        if (!access) {
+            return res.status(403).json({ error: "You cannot comment on this card" });
+        }
+
+        const comment = await prisma.comment.create({
+            data: {
+                cardId,
+                authorId: req.user!.id,
+                body: input.body
+            },
+            include: {
+                author: {
+                    select: {
+                        id: true,
+                        email: true,
+                        name: true
+                    }
+                }
+            }
+        }); 
+
+        await prisma.activity.create({
+            data: {
+                boardId: access.boardId,
+                actorId: req.user!.id,
+                action: "COMMENT_CREATED",
+                metadata: {
+                    cardId,
+                    commentId: comment.id
+                }
+            }
+        });
+
+        emitBoardEvent(req, access.boardId, "comment:created", {
+            cardId,
+            comment
+        });
+
+        res.status(201).json({ comment });
+    } catch (error) {
+        next(error);
+    }
 });
 
 cardsRouter.patch("/:cardId/move", async (req: AuthedRequest, res, next) => {
