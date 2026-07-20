@@ -170,9 +170,16 @@ label {
   gap: 10px;
 }
 
-.utility-row {
+.utility-row,
+.member-row {
   padding: 16px 22px 0;
   flex-wrap: wrap;
+}
+
+.member-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .status {
@@ -198,10 +205,20 @@ label {
 }
 
 .inline-form,
+.invite-form,
 .card-create,
 .comment-form {
   display: flex;
   gap: 8px;
+}
+
+.invite-form {
+  flex: 1;
+  min-width: 320px;
+}
+
+.invite-form select {
+  max-width: 130px;
 }
 
 .inline-form.wide {
@@ -210,6 +227,7 @@ label {
 }
 
 .inline-form button,
+.invite-form button,
 .card-create button,
 .comment-form button {
   flex: 0 0 auto;
@@ -287,6 +305,43 @@ label {
   margin-bottom: 12px;
 }
 
+.section-title.compact {
+  margin-bottom: 8px;
+}
+
+.member-summary {
+  min-width: 260px;
+  flex: 1;
+}
+
+.member-summary p,
+.readonly-note {
+  color: #6b7280;
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
+.member-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.member-pills span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #d6dde5;
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.member-pills small {
+  color: #6b7280;
+}
+
 .activity-feed,
 .card-detail {
   display: grid;
@@ -337,6 +392,18 @@ label {
 .comments {
   display: grid;
   gap: 10px;
+}
+
+.readonly-card {
+  border: 1px solid #e1e7ed;
+  border-radius: 6px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.readonly-card p {
+  color: #6b7280;
+  margin: 8px 0 0;
 }
 
 .notice,

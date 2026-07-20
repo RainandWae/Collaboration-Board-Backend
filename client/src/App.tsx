@@ -9,6 +9,8 @@ import {
   RefreshCw,
   Search,
   Send,
+  Shield,
+  UserPlus,
   Wifi,
   WifiOff
 } from "lucide-react";
@@ -39,6 +41,8 @@ type BoardMember = {
   role: "OWNER" | "EDITOR" | "VIEWER";
   user: User;
 };
+
+type BoardRole = BoardMember["role"];
 
 type List = {
   id: string;
@@ -114,8 +118,11 @@ function App() {
   const [searchResults, setSearchResults] = useState<Card[]>([]);
   const [socketConnected, setSocketConnected] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [boardRole, setBoardRole] = useState<BoardRole | null>(null);
 
   const token = session?.token ?? null;
+  const canEditBoard = boardRole === "OWNER" || boardRole === "EDITOR";
+  const canInviteMembers = boardRole === "OWNER";
 
   async function loadBoards() {
     if (!token) return;
@@ -129,8 +136,9 @@ function App() {
 
   async function loadBoard(boardId: string) {
     if (!token) return;
-    const data = await apiRequest<{ board: Board }>(`/boards/${boardId}`, token);
+    const data = await apiRequest<{ board: Board; role: BoardRole }>(`/boards/${boardId}`, token);
     setActiveBoard(data.board);
+    setBoardRole(data.role);
     setActiveCard(null);
     await loadActivity(boardId);
   }
@@ -166,6 +174,7 @@ function App() {
     setBoards([]);
     setActiveBoard(null);
     setActiveCard(null);
+    setBoardRole(null);
   }
 
   useEffect(() => {
@@ -252,7 +261,11 @@ function App() {
         <header className="topbar">
           <div>
             <h1>{activeBoard?.title ?? "Boards"}</h1>
-            <p>{activeBoard ? `${lists.length} lists` : "Create or select a board"}</p>
+            <p>
+              {activeBoard
+                ? `${lists.length} lists · ${boardRole?.toLowerCase() ?? "member"}`
+                : "Create or select a board"}
+            </p>
           </div>
           <div className="topbar-actions">
             <span className={socketConnected ? "status online" : "status offline"}>
@@ -274,12 +287,26 @@ function App() {
         {activeBoard ? (
           <>
             <section className="utility-row">
-              <CreateListForm
-                board={activeBoard}
-                token={token}
-                onCreated={() => loadBoard(activeBoard.id)}
-              />
+              {canEditBoard && (
+                <CreateListForm
+                  board={activeBoard}
+                  token={token}
+                  onCreated={() => loadBoard(activeBoard.id)}
+                />
+              )}
               <SearchPanel token={token} onResults={setSearchResults} />
+            </section>
+
+            <section className="member-row">
+              <MemberSummary members={activeBoard.members ?? []} role={boardRole} />
+              {canInviteMembers && (
+                <InviteMemberForm
+                  board={activeBoard}
+                  token={token}
+                  onInvited={() => loadBoard(activeBoard.id)}
+                  onError={setNotice}
+                />
+              )}
             </section>
 
             {searchResults.length > 0 && (
@@ -304,12 +331,14 @@ function App() {
                     <span>{list.cards?.length ?? 0}</span>
                   </div>
 
-                  <CreateCardForm
-                    list={list}
-                    token={token}
-                    onCreated={() => loadBoard(activeBoard.id)}
-                    onError={setNotice}
-                  />
+                  {canEditBoard && (
+                    <CreateCardForm
+                      list={list}
+                      token={token}
+                      onCreated={() => loadBoard(activeBoard.id)}
+                      onError={setNotice}
+                    />
+                  )}
 
                   <div className="cards">
                     {(list.cards ?? []).map((card) => (
@@ -342,6 +371,7 @@ function App() {
             onClose={() => setActiveCard(null)}
             onChanged={() => activeBoard && loadBoard(activeBoard.id)}
             onConflict={(message) => setNotice(message)}
+            canEdit={canEditBoard}
           />
         ) : (
           <ActivityFeed activities={activities} />
@@ -574,6 +604,76 @@ function SearchPanel({
   );
 }
 
+function MemberSummary({ members, role }: { members: BoardMember[]; role: BoardRole | null }) {
+  return (
+    <div className="member-summary">
+      <div className="section-title compact">
+        <Shield size={16} />
+        Members
+      </div>
+      <div className="member-pills">
+        {members.map((member) => (
+          <span key={member.user.id} title={member.user.email}>
+            {member.user.name}
+            <small>{member.role.toLowerCase()}</small>
+          </span>
+        ))}
+      </div>
+      {role === "VIEWER" && <p>Viewer access is read-only.</p>}
+    </div>
+  );
+}
+
+function InviteMemberForm({
+  board,
+  token,
+  onInvited,
+  onError
+}: {
+  board: Board;
+  token: string | null;
+  onInvited: () => void;
+  onError: (message: string) => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"EDITOR" | "VIEWER">("VIEWER");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!email.trim()) return;
+
+    try {
+      await apiRequest(`/boards/${board.id}/members`, token, {
+        method: "POST",
+        body: JSON.stringify({ email, role })
+      });
+      setEmail("");
+      setRole("VIEWER");
+      onInvited();
+    } catch (err) {
+      onError((err as ApiError).error ?? "Could not invite member");
+    }
+  }
+
+  return (
+    <form className="invite-form" onSubmit={submit}>
+      <input
+        placeholder="Member email"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+      />
+      <select value={role} onChange={(event) => setRole(event.target.value as "EDITOR" | "VIEWER")}>
+        <option value="VIEWER">Viewer</option>
+        <option value="EDITOR">Editor</option>
+      </select>
+      <button>
+        <UserPlus size={16} />
+        Invite
+      </button>
+    </form>
+  );
+}
+
 function CardDetails({
   card,
   comments,
@@ -581,7 +681,8 @@ function CardDetails({
   token,
   onClose,
   onChanged,
-  onConflict
+  onConflict,
+  canEdit
 }: {
   card: Card;
   comments: Comment[];
@@ -590,6 +691,7 @@ function CardDetails({
   onClose: () => void;
   onChanged: () => void;
   onConflict: (message: string) => void;
+  canEdit: boolean;
 }) {
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description ?? "");
@@ -662,35 +764,47 @@ function CardDetails({
         <button onClick={onClose}>Close</button>
       </div>
 
-      <form className="form-stack" onSubmit={updateCard}>
-        <label>
-          Title
-          <input value={title} onChange={(event) => setTitle(event.target.value)} />
-        </label>
-        <label>
-          Description
-          <textarea value={description} onChange={(event) => setDescription(event.target.value)} />
-        </label>
-        <button type="submit">
-          <Send size={16} />
-          Save
-        </button>
-      </form>
+      {canEdit ? (
+        <>
+          <form className="form-stack" onSubmit={updateCard}>
+            <label>
+              Title
+              <input value={title} onChange={(event) => setTitle(event.target.value)} />
+            </label>
+            <label>
+              Description
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </label>
+            <button type="submit">
+              <Send size={16} />
+              Save
+            </button>
+          </form>
 
-      <div className="move-control">
-        <div className="section-title">
-          <ArrowLeftRight size={16} />
-          Move
+          <div className="move-control">
+            <div className="section-title">
+              <ArrowLeftRight size={16} />
+              Move
+            </div>
+            <select value={targetListId} onChange={(event) => setTargetListId(event.target.value)}>
+              {lists.map((list) => (
+                <option key={list.id} value={list.id}>
+                  {list.title}
+                </option>
+              ))}
+            </select>
+            <button onClick={moveCard}>Move to top</button>
+          </div>
+        </>
+      ) : (
+        <div className="readonly-card">
+          <strong>{card.title}</strong>
+          <p>{card.description || "No description"}</p>
         </div>
-        <select value={targetListId} onChange={(event) => setTargetListId(event.target.value)}>
-          {lists.map((list) => (
-            <option key={list.id} value={list.id}>
-              {list.title}
-            </option>
-          ))}
-        </select>
-        <button onClick={moveCard}>Move to top</button>
-      </div>
+      )}
 
       <div className="comments">
         <div className="section-title">
@@ -703,16 +817,20 @@ function CardDetails({
             <p>{item.body}</p>
           </div>
         ))}
-        <form className="comment-form" onSubmit={addComment}>
-          <input
-            placeholder="Comment with @user@example.com"
-            value={comment}
-            onChange={(event) => setComment(event.target.value)}
-          />
-          <button>
-            <Send size={16} />
-          </button>
-        </form>
+        {canEdit ? (
+          <form className="comment-form" onSubmit={addComment}>
+            <input
+              placeholder="Comment with @user@example.com"
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+            />
+            <button>
+              <Send size={16} />
+            </button>
+          </form>
+        ) : (
+          <p className="readonly-note">Viewer access can read comments only.</p>
+        )}
       </div>
     </section>
   );
