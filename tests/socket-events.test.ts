@@ -10,29 +10,8 @@ jest.mock("../src/queue/notifications.queue", () => ({
 
 import { createApp } from "../src/http/app";
 import { createSocketServer } from "../src/realtime/socket";
+import { authHeader, createBoard, createList, registerUser } from "./helper/api";
 import { disconnectTestDb, resetTestDb } from "./helper/db";
-
-type RegisteredUser = {
-  token: string;
-  user: {
-    id: string;
-    email: string;
-    name: string;
-  };
-};
-
-async function registerUser(appUrl: string, email: string, name: string) {
-  const response = await request(appUrl)
-    .post("/auth/register")
-    .send({
-      email,
-      password: "password123",
-      name
-    })
-    .expect(201);
-
-  return response.body as RegisteredUser;
-}
 
 function listen(server: http.Server) {
   return new Promise<string>((resolve) => {
@@ -85,22 +64,8 @@ describe("socket events", () => {
 
     try {
       const owner = await registerUser(appUrl, "socket-owner@example.com", "Socket Owner");
-
-      const boardResponse = await request(appUrl)
-        .post("/boards")
-        .set("Authorization", `Bearer ${owner.token}`)
-        .send({ title: "Realtime Board" })
-        .expect(201);
-
-      const boardId = boardResponse.body.board.id;
-
-      const listResponse = await request(appUrl)
-        .post(`/boards/${boardId}/lists`)
-        .set("Authorization", `Bearer ${owner.token}`)
-        .send({ title: "Todo" })
-        .expect(201);
-
-      const listId = listResponse.body.list.id;
+      const board = await createBoard(appUrl, owner.token, "Realtime Board");
+      const list = await createList(appUrl, owner.token, board.id, "Todo");
 
       client = createClient(appUrl, {
         auth: {
@@ -114,7 +79,7 @@ describe("socket events", () => {
         client!.once("connect_error", reject);
       });
 
-      client.emit("board:join", { boardId });
+      client.emit("board:join", { boardId: board.id });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       const cardCreated = waitForSocketEvent<{ card: { id: string; title: string } }>(
@@ -123,8 +88,8 @@ describe("socket events", () => {
       );
 
       const cardResponse = await request(appUrl)
-        .post(`/lists/${listId}/cards`)
-        .set("Authorization", `Bearer ${owner.token}`)
+        .post(`/lists/${list.id}/cards`)
+        .set(authHeader(owner.token))
         .send({
           title: "Broadcast this card"
         })
