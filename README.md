@@ -16,6 +16,7 @@ A real-time collaborative task and notes board backend, built as an intermediate
 
 ```bash
 npm install
+npm --prefix client install
 cp .env.example .env
 docker compose up -d
 npm run prisma:generate
@@ -27,6 +28,16 @@ The API runs on:
 
 ```text
 http://localhost:4000
+```
+
+The React frontend runs on:
+
+```bash
+npm run dev:client
+```
+
+```text
+http://localhost:3000
 ```
 
 Health check:
@@ -51,6 +62,20 @@ CORS_ORIGIN=http://localhost:3000
 ```
 
 ## Implemented Features
+
+### Frontend
+
+The `client/` directory contains a React + TypeScript + Vite frontend. It includes:
+
+- login and registration
+- board selection and board creation
+- list and card creation
+- card editing with version-aware conflict feedback
+- card moving between lists
+- card comments with email mentions
+- board activity feed
+- card search
+- Socket.io live board refresh
 
 ### Auth
 
