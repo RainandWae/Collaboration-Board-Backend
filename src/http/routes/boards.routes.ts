@@ -2,9 +2,9 @@ import { BoardRole } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db/prisma";
-import { emitBoardEvent } from "../../realtime/events";
 import { requireAuth, type AuthedRequest } from "../middleware/auth";
 import { requireBoardRole } from "../permissions/boards";
+import { emitBoardEvent } from "../../realtime/events";
 
 export const boardsRouter = Router();
 
@@ -17,6 +17,11 @@ const createBoardSchema = z.object({
 const addMemberSchema = z.object({
   email: z.string().email(),
   role: z.enum(["EDITOR", "VIEWER"]).default("VIEWER")
+});
+
+const activityQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  cursor: z.string().optional()
 });
 
 const createListSchema = z.object({
@@ -127,6 +132,57 @@ boardsRouter.post("/:boardId/lists", async (req: AuthedRequest, res, next) => {
     emitBoardEvent(req, boardId, "list:created", { list });
 
     res.status(201).json({ list });
+  } catch (error) {
+    next(error);
+  }
+});
+
+boardsRouter.get("/:boardId/activity", async (req: AuthedRequest, res, next) => {
+  try {
+    const boardId = String(req.params.boardId);
+    const query = activityQuerySchema.parse(req.query);
+
+    const membership = await requireBoardRole(boardId, req.user!.id, [
+      BoardRole.OWNER,
+      BoardRole.EDITOR,
+      BoardRole.VIEWER
+    ]);
+
+    if (!membership) {
+      return res.status(403).json({ error: "You do not have access to this board activity" });
+    }
+
+    const activities = await prisma.activity.findMany({
+      where: { boardId },
+      take: query.limit + 1,
+      ...(query.cursor
+        ? {
+            cursor: { id: query.cursor },
+            skip: 1
+          }
+        : {}),
+      orderBy: {
+        createdAt: "desc"
+      },
+      include: {
+        actor: {
+          select: {
+            id: true,
+            email: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    const hasMore = activities.length > query.limit;
+    const page = hasMore ? activities.slice(0, query.limit) : activities;
+    const nextCursor = hasMore ? page[page.length - 1]?.id : null;
+
+    res.json({
+      activities: page,
+      nextCursor
+    });
   } catch (error) {
     next(error);
   }
