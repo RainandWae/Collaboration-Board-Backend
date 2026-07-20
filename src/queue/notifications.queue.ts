@@ -16,7 +16,13 @@ export function startNotificationWorker() {
   return new Worker<MentionNotificationJob>(
     "notifications",
     async (job) => {
-      console.log("send mention notification", job.data);
+      console.log("send mention queued", {
+        jobId: job.id,
+        boardId: job.data.boardId,
+        cardId: job.data.cardId,
+        mentionedUserId: job.data.mentionedUserId,
+        authorId: job.data.authorId
+      });
     },
     { connection: redis }
   );

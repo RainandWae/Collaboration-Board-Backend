@@ -5,6 +5,8 @@ import { prisma } from "../../db/prisma";
 import { emitBoardEvent } from "../../realtime/events";
 import { requireAuth, type AuthedRequest } from "../middleware/auth";
 import { requireCardBoardRole } from "../permissions/boards";
+import { parseMentionedEmails } from "../../mentions/parseMentions";
+import { notificationsQueue } from "../../queue/notifications.queue";
 
 export const cardsRouter = Router();
 
@@ -141,6 +143,40 @@ cardsRouter.post("/:cardId/comments", async (req: AuthedRequest, res, next) => {
                 }
             }
         });
+
+        const mentionedEmails = parseMentionedEmails(input.body);
+
+        if (mentionedEmails.length > 0 ) {
+            const mentionedUsers = await prisma.user.findMany({
+                where: {
+                    email: {
+                        in: mentionedEmails
+                    },
+                    memberships: {
+                        some: {
+                            boardId: access.boardId
+                        }
+                    }
+                },
+                select: {
+                    id: true,
+                    email: true
+                }
+            });
+
+            await Promise.all(
+                mentionedUsers
+                  .filter((user) => user.id !== req.user!.id)
+                  .map((user) =>
+                    notificationsQueue.add("mention", {
+                        boardId: access.boardId,
+                        cardId,
+                        mentionedUserId: user.id,
+                        authorId: req.user!.id
+                    })    
+                )
+            );
+        }
 
         emitBoardEvent(req, access.boardId, "comment:created", {
             cardId,

@@ -1,4 +1,11 @@
 import request from "supertest";
+
+jest.mock("../src/queue/notifications.queue", () => ({
+  notificationsQueue: {
+    add: jest.fn()
+  }
+}));
+
 import { createApp } from "../src/http/app";
 
 describe("health", () => {
