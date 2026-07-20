@@ -4,5 +4,6 @@ module.exports = {
   testEnvironment: "node",
   testMatch: ["**/tests/**/*.test.ts"],
   setupFiles: ["<rootDir>/tests/setup-env.ts"],
+  maxWorkers: 1,
   clearMocks: true
 };
