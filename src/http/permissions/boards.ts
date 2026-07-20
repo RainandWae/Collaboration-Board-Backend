@@ -22,7 +22,11 @@ export async function requireBoardRole(boardId: string, userId: string, allowedR
   return membership;
 }
 
-export async function requireListBoardRole(listId: string, userId: string, allowedRoles: BoardRole[]) {
+export async function requireListBoardRole(
+  listId: string,
+  userId: string,
+  allowedRoles: BoardRole[]
+) {
   const list = await prisma.list.findUnique({
     where: { id: listId },
     select: {
@@ -42,12 +46,16 @@ export async function requireListBoardRole(listId: string, userId: string, allow
   }
 
   return {
-    list, 
+    list,
     membership
   };
 }
 
-export async function requireCardBoardRole(cardId: string, userId: string, allowedRoles: BoardRole[]) {
+export async function requireCardBoardRole(
+  cardId: string,
+  userId: string,
+  allowedRoles: BoardRole[]
+) {
   const card = await prisma.card.findUnique({
     where: { id: cardId },
     select: {

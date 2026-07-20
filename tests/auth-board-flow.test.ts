@@ -7,7 +7,14 @@ jest.mock("../src/queue/notifications.queue", () => ({
 }));
 
 import { createApp } from "../src/http/app";
-import { addBoardMember, authHeader, createBoard, createCard, createList, registerUser } from "./helper/api";
+import {
+  addBoardMember,
+  authHeader,
+  createBoard,
+  createCard,
+  createList,
+  registerUser
+} from "./helper/api";
 import { disconnectTestDb, resetTestDb } from "./helper/db";
 
 const app = createApp();
@@ -27,19 +34,19 @@ describe("auth and board flow", () => {
     const viewer = await registerUser(app, "viewer@example.com", "Viewer");
     const board = await createBoard(app, owner.token, "Product Roadmap");
     const list = await createList(app, owner.token, board.id, "Todo");
-    const card = await createCard(app, owner.token, list.id, "Write integration tests", "Protect the main API flow");
+    const card = await createCard(
+      app,
+      owner.token,
+      list.id,
+      "Write integration tests",
+      "Protect the main API flow"
+    );
 
-    await request(app)
-      .get(`/boards/${board.id}`)
-      .set(authHeader(viewer.token))
-      .expect(403);
+    await request(app).get(`/boards/${board.id}`).set(authHeader(viewer.token)).expect(403);
 
     await addBoardMember(app, owner.token, board.id, viewer.user.email, "VIEWER");
 
-    await request(app)
-      .get(`/boards/${board.id}`)
-      .set(authHeader(viewer.token))
-      .expect(200);
+    await request(app).get(`/boards/${board.id}`).set(authHeader(viewer.token)).expect(200);
 
     await request(app)
       .post(`/lists/${list.id}/cards`)

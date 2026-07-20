@@ -56,7 +56,12 @@ export async function addBoardMember(
   return response.body.member;
 }
 
-export async function createList(app: RequestTarget, token: string, boardId: string, title: string) {
+export async function createList(
+  app: RequestTarget,
+  token: string,
+  boardId: string,
+  title: string
+) {
   const response = await request(app)
     .post(`/boards/${boardId}/lists`)
     .set(authHeader(token))

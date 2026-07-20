@@ -9,7 +9,14 @@ jest.mock("../src/queue/notifications.queue", () => ({
 }));
 
 import { createApp } from "../src/http/app";
-import { addBoardMember, authHeader, createBoard, createCard, createList, registerUser } from "./helper/api";
+import {
+  addBoardMember,
+  authHeader,
+  createBoard,
+  createCard,
+  createList,
+  registerUser
+} from "./helper/api";
 import { disconnectTestDb, resetTestDb } from "./helper/db";
 
 const app = createApp();
