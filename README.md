@@ -108,6 +108,8 @@ GET    /cards/:cardId
 PATCH  /cards/:cardId
 DELETE /cards/:cardId
 PATCH  /cards/:cardId/move
+GET    /cards/:cardId/comments
+POST   /cards/:cardId/comments
 ```
 
 Cards are ordered by `position` inside a list.
@@ -182,19 +184,90 @@ Events are emitted to:
 board:{boardId}
 ```
 
+### Comments and Mentions
+
+Cards support comments through:
+
+```http
+GET  /cards/:cardId/comments
+POST /cards/:cardId/comments
+```
+
+Comment bodies can mention board members by email:
+
+```text
+Please review this @user@example.com
+```
+
+When a mentioned email belongs to a user who is a member of the same board, the API queues a BullMQ `mention` notification job.
+
+### Activity Log
+
+```http
+GET /boards/:boardId/activity?limit=20
+```
+
+The activity log returns recent board activity with actor details. Supported activity types currently include:
+
+```text
+BOARD_CREATED
+LIST_CREATED
+CARD_CREATED
+CARD_UPDATED
+CARD_MOVED
+COMMENT_CREATED
+```
+
+Pagination uses a cursor:
+
+```http
+GET /boards/:boardId/activity?limit=20&cursor=activity-id
+```
+
+### Search
+
+```http
+GET /search/cards?q=search-term&limit=20
+```
+
+Card search checks card `title` and `description`, and only returns cards from boards where the authenticated user is a member.
+
 ## Testing
+
+Tests require the local PostgreSQL database to be running:
+
+```bash
+docker compose up -d
+```
+
+Run:
 
 ```bash
 npm run build
 npm run test
 ```
 
+The current test suite covers:
+
+- health check
+- auth and board collaboration flow
+- board role permissions
+- list/card creation
+- optimistic concurrency conflict handling
+- card move transaction behavior
+- comments and mention notification queueing
+- card search
+- Socket.io `card:created` delivery to board rooms
+
+Jest runs with `maxWorkers: 1` because the integration tests share and reset the same local test database.
+
 ## Remaining Roadmap
 
-1. Comments on cards.
-2. `@mentions` in comments.
-3. BullMQ notification jobs for mentions.
-4. Activity log read endpoints.
-5. PostgreSQL full-text search over cards.
-6. More integration tests for auth, permissions, cards, moves, conflicts, and Socket.io behavior.
-7. Refresh tokens and stronger production auth/session handling.
+1. Extract shared integration test helpers.
+2. Refactor repeated route patterns carefully.
+3. Add structured error handling.
+4. Add formatter/linter workflow.
+5. Upgrade search to PostgreSQL full-text search.
+6. Add more Socket.io event tests.
+7. Add refresh tokens and stronger production auth/session handling.
+8. Add rate limiting for auth endpoints.
