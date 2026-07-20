@@ -46,3 +46,34 @@ export async function requireListBoardRole(listId: string, userId: string, allow
     membership
   };
 }
+
+export async function requireCardBoardRole(cardId: string, userId: string, allowedRoles: BoardRole[]) {
+  const card = await prisma.card.findUnique({
+    where: { id: cardId },
+    select: {
+      id: true,
+      listId: true,
+      list: {
+        select: {
+          boardId: true
+        }
+      }
+    }
+  });
+
+  if (!card) {
+    return null;
+  }
+
+  const membership = await requireBoardRole(card.list.boardId, userId, allowedRoles);
+
+  if (!membership) {
+    return null;
+  }
+
+  return {
+    card,
+    boardId: card.list.boardId,
+    membership
+  };
+}

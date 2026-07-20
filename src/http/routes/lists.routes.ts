@@ -14,6 +14,102 @@ const updateListSchema = z.object({
   position: z.number().int().min(0).optional()
 });
 
+const createCardSchema = z.object({
+    title: z.string().min(1),
+    description: z.string().optional()
+});
+
+listsRouter.get("/:listId/cards", async (req:AuthedRequest, res, next) => {
+    try {
+        const listId = String(req.params.listId);
+
+        const access = await requireListBoardRole(listId, req.user!.id, [
+            BoardRole.OWNER,
+            BoardRole.EDITOR,
+            BoardRole.VIEWER
+        ]);
+
+        if (!access) {
+            return res.status(403).json({ error: "You cannot view cards in this list" });
+        }
+
+        const cards = await prisma.card.findMany({
+            where: { listId },
+            orderBy: { position: "asc" },
+            include: {
+                labels: {
+                    include: {
+                        label: true
+                    }
+                },
+                comments: {
+                    orderBy: { createdAt: "asc" },
+                    include: {
+                        author: {
+                            select: { id: true, email: true, name: true}
+                        }
+                    }
+                }
+            }
+        });
+
+        res.json({ cards });
+    } catch (error) {
+        next(error);
+    }
+});
+
+listsRouter.post("/:listId/cards", async (req: AuthedRequest, res, next) => {
+    try {
+        const listId = String(req.params.listId);
+        const input = createCardSchema.parse(req.body);
+
+        const access = await requireListBoardRole(listId, req.user!.id, [
+            BoardRole.OWNER,
+            BoardRole.EDITOR
+        ]);
+
+        if (!access) {
+            return res.status(403).json({ error: "You cannot create cards in this list" });
+        }
+
+        const lastCard = await prisma.card.aggregate({
+            where: { listId },
+            _max: {
+                position: true
+            }
+        });
+
+        const nextPosition = (lastCard._max.position ?? -1) + 1;
+
+        const card = await prisma.card.create({
+            data: {
+                listId,
+                title: input.title,
+                description: input.description,
+                position: nextPosition
+            }
+        });
+
+        await prisma.activity.create({
+            data: {
+                boardId: access.list.boardId,
+                actorId: req.user!.id,
+                action: "CARD_CREATED",
+                metadata: {
+                    cardId: card.id,
+                    listId,
+                    title: card.title
+                }
+            }
+        });
+
+        res.status(201).json({ card });
+    } catch (error) {
+        next(error);
+    }
+});
+
 listsRouter.patch("/:listId", async (req: AuthedRequest, res, next) => {
     try {
         const listId = String(req.params.listId);
