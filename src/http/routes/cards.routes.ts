@@ -11,7 +11,8 @@ cardsRouter.use(requireAuth);
 
 const updateCardSchema = z.object({
   title: z.string().min(1).optional(),
-  description: z.string().optional()
+  description: z.string().optional(),
+  version: z.number().int().min(1)
 });
 
 cardsRouter.get("/:cardId", async (req: AuthedRequest, res, next) => {
@@ -67,14 +68,41 @@ cardsRouter.patch("/:cardId", async (req: AuthedRequest, res, next) => {
       return res.status(403).json({ error: "You cannot update this card" });
     }
 
-    const card = await prisma.card.update({
-      where: { id: cardId },
+    const card = await prisma.card.updateMany({
+      where: {
+        id: cardId,
+        version: input.version
+      },
       data: {
-        ...input,
+        title: input.title,
+        description: input.description,
         version: {
           increment: 1
         }
       }
+    });
+
+    if (card.count === 0) {
+      const latestCard = await prisma.card.findUnique({
+        where: { id: cardId },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          position: true,
+          version: true,
+          updatedAt: true
+        }
+      });
+
+      return res.status(409).json({
+        error: "Card was updated by someone else",
+        latestCard
+      });
+    }
+
+    const updatedCard = await prisma.card.findUniqueOrThrow({
+      where: { id: cardId }
     });
 
     await prisma.activity.create({
@@ -83,13 +111,15 @@ cardsRouter.patch("/:cardId", async (req: AuthedRequest, res, next) => {
         actorId: req.user!.id,
         action: "CARD_UPDATED",
         metadata: {
-          cardId: card.id,
-          title: card.title
+          cardId: updatedCard.id,
+          title: updatedCard.title,
+          previousVersion: input.version,
+          nextVersion: updatedCard.version
         }
       }
     });
 
-    res.json({ card });
+    res.json({ card: updatedCard });
   } catch (error) {
     next(error);
   }
