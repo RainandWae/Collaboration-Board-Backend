@@ -1,12 +1,12 @@
 import type { Server } from "http";
 import { Server as SocketServer } from "socket.io";
 import { verifyAccessToken } from "../auth/jwt";
-import { env } from "../config/env";
+import { corsOrigins } from "../config/env";
 
 export function createSocketServer(httpServer: Server) {
   const io = new SocketServer(httpServer, {
     cors: {
-      origin: env.CORS_ORIGIN,
+      origin: corsOrigins,
       credentials: true
     }
   });

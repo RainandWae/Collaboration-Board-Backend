@@ -251,6 +251,11 @@ label {
   min-height: 150px;
 }
 
+.list-panel.drop-target {
+  border-color: #2f6f73;
+  background: #e8f3f3;
+}
+
 .list-header {
   display: flex;
   justify-content: space-between;
@@ -271,21 +276,42 @@ label {
 }
 
 .card-item {
-  display: grid;
-  justify-items: start;
+  display: block;
   text-align: left;
   background: #ffffff;
   min-height: 82px;
   padding: 12px;
-  gap: 6px;
+  touch-action: none;
+  width: 100%;
 }
 
-.card-item span {
+.card-item.dragging {
+  opacity: 0.45;
+}
+
+.card-preview {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  width: 100%;
+}
+
+.card-preview.overlay {
+  background: #ffffff;
+  border: 1px solid #9aa9b8;
+  border-radius: 6px;
+  box-shadow: 0 14px 30px rgba(31, 41, 55, 0.18);
+  min-height: 82px;
+  padding: 12px;
+  width: 280px;
+}
+
+.card-preview span {
   color: #6b7280;
   font-size: 13px;
 }
 
-.card-item small {
+.card-preview small {
   color: #778391;
 }
 

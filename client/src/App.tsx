@@ -1,4 +1,22 @@
 import {
+  closestCenter,
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  useDroppable,
+  useSensor,
+  useSensors
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Activity,
   ArrowLeftRight,
   Bell,
@@ -119,6 +137,8 @@ function App() {
   const [socketConnected, setSocketConnected] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [boardRole, setBoardRole] = useState<BoardRole | null>(null);
+  const [draggingCard, setDraggingCard] = useState<Card | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const token = session?.token ?? null;
   const canEditBoard = boardRole === "OWNER" || boardRole === "EDITOR";
@@ -175,6 +195,105 @@ function App() {
     setActiveBoard(null);
     setActiveCard(null);
     setBoardRole(null);
+  }
+
+  function findCardLocation(cardId: string, board: Board | null = activeBoard) {
+    for (const list of board?.lists ?? []) {
+      const cardIndex = (list.cards ?? []).findIndex((card) => card.id === cardId);
+
+      if (cardIndex !== -1) {
+        return { list, cardIndex, card: list.cards[cardIndex] };
+      }
+    }
+
+    return null;
+  }
+
+  function findList(listId: string) {
+    return activeBoard?.lists?.find((list) => list.id === listId) ?? null;
+  }
+
+  function moveCardOptimistically(cardId: string, targetListId: string, targetPosition: number) {
+    setActiveBoard((currentBoard) => {
+      if (!currentBoard?.lists) return currentBoard;
+
+      const sourceLocation = findCardLocation(cardId, currentBoard);
+      if (!sourceLocation) return currentBoard;
+
+      const nextLists = currentBoard.lists.map((list) => ({
+        ...list,
+        cards: [...(list.cards ?? [])]
+      }));
+      const sourceList = nextLists.find((list) => list.id === sourceLocation.list.id);
+      const targetList = nextLists.find((list) => list.id === targetListId);
+
+      if (!sourceList || !targetList) return currentBoard;
+
+      const sourceIndex = sourceList.cards.findIndex((card) => card.id === cardId);
+      if (sourceIndex === -1) return currentBoard;
+
+      if (sourceList.id === targetList.id) {
+        sourceList.cards = arrayMove(sourceList.cards, sourceIndex, targetPosition).map(
+          (card, index) => ({ ...card, position: index })
+        );
+      } else {
+        const [movedCard] = sourceList.cards.splice(sourceIndex, 1);
+        targetList.cards.splice(targetPosition, 0, { ...movedCard, listId: targetListId });
+        sourceList.cards = sourceList.cards.map((card, index) => ({ ...card, position: index }));
+        targetList.cards = targetList.cards.map((card, index) => ({ ...card, position: index }));
+      }
+
+      return { ...currentBoard, lists: nextLists };
+    });
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    const location = findCardLocation(String(event.active.id));
+    setDraggingCard(location?.card ?? null);
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setDraggingCard(null);
+
+    if (!token || !activeBoard || !canEditBoard || !event.over) return;
+
+    const cardId = String(event.active.id);
+    const sourceLocation = findCardLocation(cardId);
+    if (!sourceLocation) return;
+
+    const overId = String(event.over.id);
+    const overCardLocation = findCardLocation(overId);
+    const overList = overCardLocation?.list ?? findList(overId);
+    if (!overList) return;
+
+    const targetListId = overList.id;
+    const targetPosition = overCardLocation
+      ? overCardLocation.cardIndex
+      : (overList.cards?.length ?? 0);
+
+    if (sourceLocation.list.id === targetListId && sourceLocation.cardIndex === targetPosition) {
+      return;
+    }
+
+    moveCardOptimistically(cardId, targetListId, targetPosition);
+
+    try {
+      await apiRequest(`/cards/${cardId}/move`, token, {
+        method: "PATCH",
+        body: JSON.stringify({
+          targetListId,
+          position: targetPosition,
+          version: sourceLocation.card.version
+        })
+      });
+      await loadBoard(activeBoard.id);
+    } catch (err) {
+      const error = err as ApiError;
+      setNotice(
+        error.latestCard ? `Conflict: latest version is ${error.latestCard.version}` : error.error
+      );
+      await loadBoard(activeBoard.id);
+    }
   }
 
   useEffect(() => {
@@ -263,7 +382,7 @@ function App() {
             <h1>{activeBoard?.title ?? "Boards"}</h1>
             <p>
               {activeBoard
-                ? `${lists.length} lists · ${boardRole?.toLowerCase() ?? "member"}`
+                ? `${lists.length} lists - ${boardRole?.toLowerCase() ?? "member"}`
                 : "Create or select a board"}
             </p>
           </div>
@@ -323,35 +442,30 @@ function App() {
               </section>
             )}
 
-            <section className="board-canvas">
-              {lists.map((list) => (
-                <article className="list-panel" key={list.id}>
-                  <div className="list-header">
-                    <strong>{list.title}</strong>
-                    <span>{list.cards?.length ?? 0}</span>
-                  </div>
-
-                  {canEditBoard && (
-                    <CreateCardForm
-                      list={list}
-                      token={token}
-                      onCreated={() => loadBoard(activeBoard.id)}
-                      onError={setNotice}
-                    />
-                  )}
-
-                  <div className="cards">
-                    {(list.cards ?? []).map((card) => (
-                      <button className="card-item" key={card.id} onClick={() => openCard(card)}>
-                        <strong>{card.title}</strong>
-                        {card.description && <span>{card.description}</span>}
-                        <small>v{card.version}</small>
-                      </button>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </section>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setDraggingCard(null)}
+            >
+              <section className="board-canvas">
+                {lists.map((list) => (
+                  <BoardList
+                    key={list.id}
+                    list={list}
+                    canEdit={canEditBoard}
+                    token={token}
+                    onCardOpen={openCard}
+                    onCardCreated={() => loadBoard(activeBoard.id)}
+                    onError={setNotice}
+                  />
+                ))}
+              </section>
+              <DragOverlay>
+                {draggingCard ? <CardPreview card={draggingCard} isOverlay /> : null}
+              </DragOverlay>
+            </DndContext>
           </>
         ) : (
           <section className="empty-state">
@@ -377,6 +491,94 @@ function App() {
           <ActivityFeed activities={activities} />
         )}
       </aside>
+    </div>
+  );
+}
+
+function BoardList({
+  list,
+  canEdit,
+  token,
+  onCardOpen,
+  onCardCreated,
+  onError
+}: {
+  list: List;
+  canEdit: boolean;
+  token: string | null;
+  onCardOpen: (card: Card) => void;
+  onCardCreated: () => void;
+  onError: (message: string) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: list.id,
+    disabled: !canEdit
+  });
+
+  return (
+    <article className={isOver ? "list-panel drop-target" : "list-panel"} ref={setNodeRef}>
+      <div className="list-header">
+        <strong>{list.title}</strong>
+        <span>{list.cards?.length ?? 0}</span>
+      </div>
+
+      {canEdit && (
+        <CreateCardForm list={list} token={token} onCreated={onCardCreated} onError={onError} />
+      )}
+
+      <SortableContext
+        items={(list.cards ?? []).map((card) => card.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="cards">
+          {(list.cards ?? []).map((card) => (
+            <SortableCard key={card.id} card={card} canEdit={canEdit} onCardOpen={onCardOpen} />
+          ))}
+        </div>
+      </SortableContext>
+    </article>
+  );
+}
+
+function SortableCard({
+  card,
+  canEdit,
+  onCardOpen
+}: {
+  card: Card;
+  canEdit: boolean;
+  onCardOpen: (card: Card) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: card.id,
+    disabled: !canEdit
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition
+  };
+
+  return (
+    <button
+      ref={setNodeRef}
+      className={isDragging ? "card-item dragging" : "card-item"}
+      style={style}
+      onClick={() => onCardOpen(card)}
+      {...attributes}
+      {...listeners}
+    >
+      <CardPreview card={card} />
+    </button>
+  );
+}
+
+function CardPreview({ card, isOverlay = false }: { card: Card; isOverlay?: boolean }) {
+  return (
+    <div className={isOverlay ? "card-preview overlay" : "card-preview"}>
+      <strong>{card.title}</strong>
+      {card.description && <span>{card.description}</span>}
+      <small>v{card.version}</small>
     </div>
   );
 }
