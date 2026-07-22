@@ -1,26 +1,52 @@
 # Collaboration Board Backend
 
-A real-time collaborative task and notes board backend, built as an intermediate-size backend project focused on relational modeling, role-based access control, WebSockets, transactions, and conflict handling.
+A real-time collaborative task and notes board project, built to practice backend problems that are different from file upload/image-processing APIs: relational modeling, role-based access control, WebSockets, transactions, background jobs, health checks, API documentation, and production Docker setup.
 
 ## Tech Stack
 
 - Node.js, TypeScript, Express
-- PostgreSQL and Prisma
+- PostgreSQL, Prisma, and SQL transactions
 - Redis and BullMQ
 - Socket.io
 - JWT authentication
-- Jest and Supertest
-- Docker Compose for local infrastructure
+- React, TypeScript, and Vite frontend
+- OpenAPI / Swagger API docs
+- Pino structured HTTP logging
+- Jest, Supertest, and socket.io-client
+- Docker Compose for local infrastructure and production-style containers
+- GitHub Actions CI for backend and frontend checks
 
 ## Local Setup
+
+Install backend and frontend dependencies:
 
 ```bash
 npm install
 npm --prefix client install
+```
+
+Create your environment file:
+
+```bash
 cp .env.example .env
+```
+
+Start PostgreSQL and Redis:
+
+```bash
 docker compose up -d
+```
+
+Generate Prisma client and run migrations:
+
+```bash
 npm run prisma:generate
 npm run prisma:migrate
+```
+
+Start the API:
+
+```bash
 npm run dev
 ```
 
@@ -30,20 +56,22 @@ The API runs on:
 http://localhost:4000
 ```
 
-The React frontend runs on:
+Start the React frontend in another terminal:
 
 ```bash
 npm run dev:client
 ```
 
+The frontend normally runs on:
+
 ```text
 http://localhost:3000
 ```
 
-Health check:
+If port `3000` is already in use, Vite will automatically use the next available port, usually:
 
-```http
-GET /health
+```text
+http://localhost:3001
 ```
 
 ## Environment Variables
@@ -58,7 +86,54 @@ PORT=4000
 DATABASE_URL=postgresql://syncboard:syncboard@localhost:5432/syncboard?schema=public
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=replace-with-at-least-16-characters
-CORS_ORIGIN=http://localhost:3000
+CORS_ORIGIN=http://localhost:3000,http://localhost:3001
+```
+
+`JWT_SECRET` must be at least 16 characters.
+
+## API Docs
+
+Swagger UI:
+
+```http
+GET /docs
+```
+
+Raw OpenAPI JSON:
+
+```http
+GET /docs.json
+```
+
+Use this when you want to inspect available routes, request bodies, response shapes, and auth requirements.
+
+## Health Checks
+
+Basic health check:
+
+```http
+GET /health
+```
+
+Liveness check:
+
+```http
+GET /health/live
+```
+
+Readiness check:
+
+```http
+GET /health/ready
+```
+
+`/health/live` only confirms the API process is alive. `/health/ready` checks whether the API can reach PostgreSQL and Redis, which is the endpoint used by the production Docker health check.
+
+Example:
+
+```bash
+curl.exe http://localhost:4000/health/live
+curl.exe http://localhost:4000/health/ready
 ```
 
 ## Implemented Features
@@ -67,14 +142,15 @@ CORS_ORIGIN=http://localhost:3000
 
 The `client/` directory contains a React + TypeScript + Vite frontend. It includes:
 
-- login and registration
-- board selection and board creation
-- list and card creation
-- card editing with version-aware conflict feedback
-- card moving between lists
-- card comments with email mentions
-- board activity feed
-- card search
+- Login and registration
+- Board selection and board creation
+- Member invite form with board roles
+- List and card creation
+- Drag-and-drop card movement
+- Card editing with version-aware conflict feedback
+- Card comments with email mentions
+- Board activity feed
+- Card search
 - Socket.io live board refresh
 
 ### Auth
@@ -201,6 +277,8 @@ card:created
 card:updated
 card:deleted
 card:moved
+comment:created
+member:added
 ```
 
 Events are emitted to:
@@ -232,18 +310,7 @@ When a mentioned email belongs to a user who is a member of the same board, the 
 GET /boards/:boardId/activity?limit=20
 ```
 
-The activity log returns recent board activity with actor details. Supported activity types currently include:
-
-```text
-BOARD_CREATED
-LIST_CREATED
-CARD_CREATED
-CARD_UPDATED
-CARD_MOVED
-COMMENT_CREATED
-```
-
-Pagination uses a cursor:
+The activity log returns recent board activity with actor details. Pagination uses a cursor:
 
 ```http
 GET /boards/:boardId/activity?limit=20&cursor=activity-id
@@ -257,6 +324,58 @@ GET /search/cards?q=search-term&limit=20
 
 Card search checks card `title` and `description`, and only returns cards from boards where the authenticated user is a member.
 
+### Structured Errors and Request IDs
+
+Every request gets an `x-request-id` response header. Clients can also send their own `x-request-id`, which is reused by the API.
+
+Error responses use a consistent structure:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "requestId": "request-id"
+  }
+}
+```
+
+HTTP requests are logged with Pino so request IDs, method, path, status code, and errors are easier to trace.
+
+## Production Docker
+
+Build the production image:
+
+```bash
+docker compose -f docker-compose.prod.yml build
+```
+
+Start the production-style stack:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Check container status:
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+```
+
+Check API readiness:
+
+```bash
+curl.exe http://localhost:4000/health/ready
+```
+
+Stop the production-style stack:
+
+```bash
+docker compose -f docker-compose.prod.yml down
+```
+
+The production compose file starts PostgreSQL, Redis, and the API. The API container runs Prisma migrations before starting `node dist/server.js`.
+
 ## Testing
 
 Tests require the local PostgreSQL database to be running:
@@ -265,34 +384,59 @@ Tests require the local PostgreSQL database to be running:
 docker compose up -d
 ```
 
-Run:
+Run backend checks:
 
 ```bash
+npm run format:check
 npm run build
 npm run test
 ```
 
-The current test suite covers:
+Run frontend checks:
 
-- health check
-- auth and board collaboration flow
-- board role permissions
-- list/card creation
-- optimistic concurrency conflict handling
-- card move transaction behavior
-- comments and mention notification queueing
-- card search
-- Socket.io `card:created` delivery to board rooms
+```bash
+npm --prefix client run format:check
+npm --prefix client run build
+```
+
+The current backend test suite covers:
+
+- Health checks
+- Auth and board collaboration flow
+- Board role permissions
+- List/card creation
+- Optimistic concurrency conflict handling
+- Card move transaction behavior
+- Comments and mention notification queueing
+- Card search
+- Socket.io event delivery to board rooms
 
 Jest runs with `maxWorkers: 1` because the integration tests share and reset the same local test database.
 
+## CI
+
+GitHub Actions runs on pushes and pull requests.
+
+The backend job runs:
+
+- Dependency install
+- Prisma generate
+- Prisma migrations against a PostgreSQL service container
+- Format check
+- TypeScript build
+- Jest tests
+
+The frontend job runs:
+
+- Dependency install
+- Format check
+- TypeScript/Vite build
+
 ## Remaining Roadmap
 
-1. Extract shared integration test helpers.
-2. Refactor repeated route patterns carefully.
-3. Add structured error handling.
-4. Add formatter/linter workflow.
-5. Upgrade search to PostgreSQL full-text search.
-6. Add more Socket.io event tests.
-7. Add refresh tokens and stronger production auth/session handling.
-8. Add rate limiting for auth endpoints.
+1. Add rate limiting and security hardening for auth endpoints.
+2. Add refresh tokens and stronger production session handling.
+3. Upgrade search to PostgreSQL full-text search.
+4. Add labels/tags routes and frontend support.
+5. Add more Socket.io integration tests.
+6. Add deployment docs for a real cloud target.
