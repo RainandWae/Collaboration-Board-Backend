@@ -434,36 +434,9 @@ The frontend job runs:
 
 ## Remaining Roadmap
 
-These are the main backend features still worth adding. They are ordered by how useful they are for showing stronger backend engineering experience.
-
-1. Rate limiting and security hardening
-
-   Add request limits for sensitive endpoints such as login, register, invites, and comments. This should include per-IP and per-account throttling, better auth abuse protection, stricter production CORS settings, and security-focused tests.
-
-2. Refresh tokens and session management
-
-   Replace the current simple JWT-only login flow with short-lived access tokens and longer-lived refresh tokens. Store refresh token records in PostgreSQL so sessions can be rotated, revoked, expired, and listed per user.
-
-3. PostgreSQL full-text search
-
-   Upgrade the current basic card search to real PostgreSQL full-text search using `tsvector`, weighted ranking, indexes, and pagination. This would make the search feature more realistic and show database-level query optimization.
-
-4. Labels and tags
-
-   Add full labels/tags support for cards, including routes, permissions, filtering, search integration, realtime events, and frontend controls. This would exercise many-to-many relationships and practical query design.
-
-5. Notification delivery worker
-
-   Turn the current mention queue into a fuller worker flow with retry handling, failed-job logging, and a mock email provider. Add tests for queued jobs, retries, and notification records.
-
-6. Stronger Socket.io test coverage
-
-   Add integration tests for more realtime events: card moves, card edits, comments, member invites, disconnect/reconnect behavior, and unauthorized board room joins.
-
-7. Audit log improvements
-
-   Expand activity tracking so important actions are consistently recorded across boards, members, lists, cards, comments, labels, and permissions. Add filters by actor, action type, and date range.
-
-8. Deployment documentation
-
-   Add a real deployment guide for a cloud target such as Render, Railway, Fly.io, AWS ECS, or DigitalOcean. Include production environment variables, managed Postgres/Redis setup, migrations, health checks, and frontend API URL configuration.
+1. Add rate limiting and security hardening for auth endpoints.
+2. Add refresh tokens and stronger production session handling.
+3. Upgrade search to PostgreSQL full-text search.
+4. Add labels/tags routes and frontend support.
+5. Add more Socket.io integration tests.
+6. Add deployment docs for a real cloud target.
