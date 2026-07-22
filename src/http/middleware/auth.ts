@@ -8,12 +8,22 @@ export type AuthedRequest = Request & {
   };
 };
 
+function authError(res: Response, code: string, message: string) {
+  return res.status(401).json({
+    error: {
+      code,
+      message,
+      requestId: res.locals.requestId
+    }
+  });
+}
+
 export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
   const header = req.header("authorization");
   const token = header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : null;
 
   if (!token) {
-    return res.status(401).json({ error: "Missing bearer token" });
+    return authError(res, "MISSING_BEARER_TOKEN", "Missing bearer token");
   }
 
   try {
@@ -21,6 +31,6 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
     req.user = { id: payload.sub, email: payload.email };
     return next();
   } catch {
-    return res.status(401).json({ error: "Invalid bearer token" });
+    return authError(res, "INVALID_BEARER_TOKEN", "Invalid bearer token");
   }
 }

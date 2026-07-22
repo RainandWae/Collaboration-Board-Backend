@@ -1,17 +1,18 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import morgan from "morgan";
 import swaggerUi from "swagger-ui-express";
 import { corsOrigins } from "../config/env";
+import { openApiSpec } from "../docs/openapi";
 import { errorHandler } from "./middleware/errorHandler";
+import { httpLogger } from "./middleware/httpLogger";
+import { requestContext } from "./middleware/requestContext";
 import { authRouter } from "./routes/auth.routes";
 import { boardsRouter } from "./routes/boards.routes";
+import { cardsRouter } from "./routes/cards.routes";
 import { healthRouter } from "./routes/health.routes";
 import { listsRouter } from "./routes/lists.routes";
-import { cardsRouter } from "./routes/cards.routes";
 import { searchRouter } from "./routes/search.routes";
-import { openApiSpec } from "../docs/openapi";
 
 export function createApp() {
   const app = express();
@@ -19,8 +20,9 @@ export function createApp() {
   app.use(helmet());
   app.use(cors({ origin: corsOrigins, credentials: true }));
   app.use(express.json());
-  app.use(morgan("dev"));
-  
+  app.use(requestContext);
+  app.use(httpLogger);
+
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
   app.get("/docs.json", (_req, res) => {
     res.json(openApiSpec);
