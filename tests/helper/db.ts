@@ -1,4 +1,5 @@
 import { prisma } from "../../src/db/prisma";
+import { redis } from "../../src/queue/connection";
 
 export async function resetTestDb() {
   await prisma.cardLabel.deleteMany();
@@ -13,5 +14,6 @@ export async function resetTestDb() {
 }
 
 export async function disconnectTestDb() {
+  await redis.quit();
   await prisma.$disconnect();
 }
